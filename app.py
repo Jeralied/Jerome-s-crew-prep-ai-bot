@@ -1,125 +1,305 @@
+```python
 import json
 import random
 import streamlit as st
 
 
-# =========================================================
+# ============================================================
 # PAGE CONFIGURATION
-# =========================================================
+# ============================================================
 
 st.set_page_config(
-    page_title="Crew Prep AI Bot",
+    page_title="Crew Prep AI",
     page_icon="✈️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 
-# =========================================================
-# CUSTOM STYLING
-# =========================================================
+# ============================================================
+# CUSTOM CSS
+# ============================================================
 
-st.markdown("""
-<style>
+st.markdown(
+    """
+    <style>
 
-    .main {
-        padding-top: 1rem;
+    /* ---------- GENERAL ---------- */
+
+    .stApp {
+        background: #f5f7fa;
     }
 
+    .block-container {
+        max-width: 1150px;
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+    }
+
+    /* ---------- HERO ---------- */
+
     .hero {
-        padding: 2rem;
-        border-radius: 20px;
-        background: linear-gradient(
-            135deg,
-            #0b1f3a 0%,
-            #123e63 100%
-        );
+        background: linear-gradient(135deg, #102a43, #1f4e79);
+        padding: 42px 38px;
+        border-radius: 22px;
+        margin-bottom: 25px;
         color: white;
-        margin-bottom: 2rem;
+        box-shadow: 0 10px 30px rgba(16, 42, 67, 0.18);
     }
 
     .hero h1 {
         font-size: 42px;
-        margin-bottom: 5px;
+        margin: 0 0 8px 0;
+        font-weight: 800;
+        letter-spacing: -1px;
     }
 
     .hero p {
-        font-size: 17px;
-        opacity: 0.9;
+        font-size: 18px;
+        margin: 0;
+        opacity: 0.92;
+        line-height: 1.6;
     }
+
+    .hero-badge {
+        display: inline-block;
+        background: rgba(255,255,255,0.15);
+        border: 1px solid rgba(255,255,255,0.25);
+        padding: 7px 13px;
+        border-radius: 999px;
+        font-size: 13px;
+        margin-bottom: 14px;
+    }
+
+    /* ---------- QUESTION CARD ---------- */
 
     .question-card {
-        padding: 1.8rem;
-        border-radius: 18px;
-        border: 1px solid #dddddd;
         background: white;
-        margin: 1rem 0;
+        border: 1px solid #e2e8f0;
+        border-radius: 20px;
+        padding: 30px;
+        margin-top: 10px;
+        margin-bottom: 20px;
+        box-shadow: 0 7px 25px rgba(15, 23, 42, 0.07);
     }
 
-    .category {
-        font-size: 14px;
+    .category-label {
+        display: inline-block;
+        background: #e8f1fb;
+        color: #1f4e79;
         font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 1px;
+        font-size: 13px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        margin-bottom: 15px;
     }
+
+    .question-number {
+        color: #64748b;
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    .question-text {
+        color: #102a43;
+        font-size: 28px;
+        line-height: 1.35;
+        font-weight: 750;
+        margin-bottom: 18px;
+    }
+
+    /* ---------- TIP ---------- */
 
     .tip-box {
-        padding: 1rem;
-        border-radius: 12px;
-        background: #f4f7fb;
-        border-left: 5px solid #123e63;
-        margin-top: 1rem;
+        background: #f8fafc;
+        border-left: 4px solid #2f8f7e;
+        border-radius: 10px;
+        padding: 15px 17px;
+        color: #475569;
+        font-size: 14px;
+        line-height: 1.6;
+        margin-top: 12px;
     }
 
-    .stat-card {
-        padding: 1rem;
-        border-radius: 15px;
-        border: 1px solid #dddddd;
-        text-align: center;
-        background: white;
+    .tip-title {
+        font-weight: 800;
+        color: #1e293b;
     }
+
+    /* ---------- RESULT CARDS ---------- */
+
+    .result-card {
+        background: white;
+        border-radius: 16px;
+        padding: 22px;
+        border: 1px solid #e2e8f0;
+        margin-top: 15px;
+        box-shadow: 0 5px 18px rgba(15, 23, 42, 0.06);
+    }
+
+    .score-number {
+        font-size: 48px;
+        font-weight: 800;
+        color: #1f4e79;
+        line-height: 1;
+    }
+
+    .score-label {
+        color: #64748b;
+        font-size: 14px;
+        margin-top: 5px;
+    }
+
+    .strength {
+        background: #ecfdf5;
+        border-left: 4px solid #2f8f7e;
+        padding: 12px 15px;
+        border-radius: 8px;
+        margin: 7px 0;
+        color: #166534;
+    }
+
+    .weakness {
+        background: #fff7ed;
+        border-left: 4px solid #f59e0b;
+        padding: 12px 15px;
+        border-radius: 8px;
+        margin: 7px 0;
+        color: #9a3412;
+    }
+
+    /* ---------- STAR BOX ---------- */
+
+    .star-box {
+        background: #eef4fb;
+        border: 1px solid #d7e4f2;
+        border-radius: 14px;
+        padding: 20px;
+        margin-top: 18px;
+    }
+
+    .star-title {
+        color: #102a43;
+        font-size: 18px;
+        font-weight: 800;
+        margin-bottom: 10px;
+    }
+
+    .star-item {
+        margin: 7px 0;
+        color: #334155;
+        line-height: 1.5;
+    }
+
+    /* ---------- SIDEBAR ---------- */
+
+    section[data-testid="stSidebar"] {
+        background: #102a43;
+    }
+
+    section[data-testid="stSidebar"] * {
+        color: white;
+    }
+
+    /* ---------- BUTTONS ---------- */
+
+    .stButton > button {
+        border-radius: 10px;
+        font-weight: 700;
+        min-height: 44px;
+    }
+
+    /* ---------- FOOTER ---------- */
 
     .footer {
         text-align: center;
-        padding: 2rem 0;
-        color: #777777;
-        font-size: 14px;
+        color: #94a3b8;
+        font-size: 13px;
+        padding-top: 35px;
+        padding-bottom: 10px;
     }
 
-</style>
-""", unsafe_allow_html=True)
+    /* ---------- MOBILE ---------- */
+
+    @media (max-width: 700px) {
+
+        .block-container {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+
+        .hero {
+            padding: 28px 22px;
+            border-radius: 17px;
+        }
+
+        .hero h1 {
+            font-size: 31px;
+        }
+
+        .hero p {
+            font-size: 15px;
+        }
+
+        .question-card {
+            padding: 22px;
+        }
+
+        .question-text {
+            font-size: 22px;
+        }
+
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
-# =========================================================
+# ============================================================
 # LOAD QUESTIONS
-# =========================================================
+# ============================================================
 
-try:
+@st.cache_data
+def load_questions():
+    try:
+        with open("questions.json", "r", encoding="utf-8") as file:
+            return json.load(file)
 
-    with open("questions.json", "r", encoding="utf-8") as file:
-        questions = json.load(file)
+    except FileNotFoundError:
+        st.error(
+            "❌ questions.json was not found. "
+            "Make sure questions.json is in the same folder as app.py."
+        )
+        return []
 
-except FileNotFoundError:
+    except json.JSONDecodeError:
+        st.error(
+            "❌ questions.json contains invalid JSON. "
+            "Please check the file formatting."
+        )
+        return []
 
-    st.error(
-        "questions.json was not found. "
-        "Make sure it is uploaded to the same GitHub repository as app.py."
-    )
 
+questions = load_questions()
+
+
+# Stop the app if questions cannot be loaded.
+if not questions:
     st.stop()
 
 
-# =========================================================
+# ============================================================
 # SESSION STATE
-# =========================================================
+# ============================================================
 
 if "current_question" not in st.session_state:
     st.session_state.current_question = random.choice(questions)
 
-if "questions_answered" not in st.session_state:
-    st.session_state.questions_answered = 0
-
-if "total_score" not in st.session_state:
-    st.session_state.total_score = 0.0
+if "answered" not in st.session_state:
+    st.session_state.answered = False
 
 if "last_score" not in st.session_state:
     st.session_state.last_score = None
@@ -127,616 +307,722 @@ if "last_score" not in st.session_state:
 if "last_feedback" not in st.session_state:
     st.session_state.last_feedback = None
 
-if "last_strengths" not in st.session_state:
-    st.session_state.last_strengths = []
+if "questions_answered" not in st.session_state:
+    st.session_state.questions_answered = 0
 
-if "last_improvements" not in st.session_state:
-    st.session_state.last_improvements = []
+if "total_score" not in st.session_state:
+    st.session_state.total_score = 0
+
+if "selected_category" not in st.session_state:
+    st.session_state.selected_category = "All Categories"
 
 
-# =========================================================
-# FUNCTIONS
-# =========================================================
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
 
-def get_new_question():
+def get_categories():
+    categories = sorted(
+        list(set(question["category"] for question in questions))
+    )
+    return ["All Categories"] + categories
 
-    current = st.session_state.current_question
 
-    possible_questions = [
+def get_available_questions(category):
+    if category == "All Categories":
+        return questions
+
+    return [
         question
         for question in questions
-        if question["q"] != current["q"]
+        if question["category"] == category
     ]
 
-    if possible_questions:
-        st.session_state.current_question = random.choice(
-            possible_questions
-        )
-    else:
-        st.session_state.current_question = random.choice(
-            questions
-        )
 
+def choose_question(category=None):
+    """
+    Choose a random question while respecting the selected category.
+    """
+
+    if category is None:
+        category = st.session_state.selected_category
+
+    available = get_available_questions(category)
+
+    if not available:
+        available = questions
+
+    # Try not to show exactly the same question twice in a row.
+    if len(available) > 1:
+        possible_questions = [
+            q
+            for q in available
+            if q != st.session_state.current_question
+        ]
+
+        if possible_questions:
+            return random.choice(possible_questions)
+
+    return random.choice(available)
+
+
+def reset_question():
+    st.session_state.current_question = choose_question()
+    st.session_state.answered = False
     st.session_state.last_score = None
     st.session_state.last_feedback = None
-    st.session_state.last_strengths = []
-    st.session_state.last_improvements = []
 
 
-def evaluate_answer(answer):
+def evaluate_answer(answer, question):
+    """
+    Simple interview-answer evaluation.
 
-    text = answer.lower()
+    This version does not require an external AI API.
+    It evaluates the answer using useful interview indicators.
+    """
+
+    answer = answer.strip()
+
+    if not answer:
+        return {
+            "score": 0,
+            "strengths": ["You did not provide an answer yet."],
+            "improvements": [
+                "Write a complete answer before submitting."
+            ],
+        }
+
     words = answer.split()
+    word_count = len(words)
 
-    score = 0
+    score = 1
     strengths = []
     improvements = []
 
-    # -----------------------------------------------------
-    # ANSWER LENGTH
-    # -----------------------------------------------------
+    # --------------------------------------------------------
+    # LENGTH
+    # --------------------------------------------------------
 
-    if len(words) >= 50:
-
+    if word_count >= 80:
         score += 1
         strengths.append(
-            "Your answer contains good detail."
+            "Your answer has enough detail to develop your point."
         )
 
-    elif len(words) >= 30:
-
-        score += 0.5
+    elif word_count >= 45:
+        score += 1
+        strengths.append(
+            "Your answer provides a reasonable amount of detail."
+        )
 
     else:
-
         improvements.append(
-            "Add more detail to your answer."
+            "Try to give more detail. Aim for roughly 60–120 words "
+            "for most interview answers."
         )
 
+    # --------------------------------------------------------
+    # CUSTOMER SERVICE / PROFESSIONAL LANGUAGE
+    # --------------------------------------------------------
 
-    # -----------------------------------------------------
-    # KEYWORDS
-    # -----------------------------------------------------
+    positive_terms = [
+        "customer",
+        "passenger",
+        "service",
+        "safety",
+        "team",
+        "teamwork",
+        "communication",
+        "professional",
+        "calm",
+        "respect",
+        "help",
+        "assist",
+        "experience",
+        "solution",
+        "listen",
+        "empathy",
+        "responsibility",
+        "adapt",
+        "learn",
+    ]
 
-    keywords = {
+    lower_answer = answer.lower()
 
-        "safety":
-            "You showed awareness of passenger safety.",
+    matched_terms = [
+        term for term in positive_terms
+        if term in lower_answer
+    ]
 
-        "customer":
-            "You demonstrated customer-service awareness.",
+    if len(matched_terms) >= 4:
+        score += 1
+        strengths.append(
+            "You used language that is relevant to cabin crew and "
+            "customer-facing work."
+        )
 
-        "passenger":
-            "You focused on the passenger experience.",
+    else:
+        improvements.append(
+            "Connect your answer more clearly to cabin crew qualities "
+            "such as safety, service, teamwork, communication, empathy, "
+            "and professionalism."
+        )
 
-        "service":
-            "You highlighted the importance of service.",
+    # --------------------------------------------------------
+    # EXAMPLE / EVIDENCE
+    # --------------------------------------------------------
 
-        "team":
-            "You demonstrated teamwork awareness.",
+    evidence_terms = [
+        "when",
+        "while",
+        "because",
+        "for example",
+        "experience",
+        "worked",
+        "handled",
+        "helped",
+        "during",
+        "situation",
+    ]
 
-        "communication":
-            "You highlighted communication skills.",
+    evidence_count = sum(
+        1 for term in evidence_terms
+        if term in lower_answer
+    )
 
-        "calm":
-            "You showed awareness of staying calm under pressure.",
+    if evidence_count >= 2:
+        score += 1
+        strengths.append(
+            "You included evidence or an example rather than relying "
+            "only on general statements."
+        )
 
-        "professional":
-            "You demonstrated professionalism.",
+    else:
+        improvements.append(
+            "Where possible, include a real example from your work, "
+            "school, volunteering, or other experience."
+        )
 
-        "empathy":
-            "You showed empathy toward customers or passengers.",
+    # --------------------------------------------------------
+    # STAR / STRUCTURE
+    # --------------------------------------------------------
 
-        "responsibility":
-            "You demonstrated a sense of responsibility.",
-
-        "adapt":
-            "You showed adaptability."
-    }
-
-
-    for keyword, message in keywords.items():
-
-        if keyword in text:
-
-            score += 0.5
-            strengths.append(message)
-
-
-    # -----------------------------------------------------
-    # STAR METHOD
-    # -----------------------------------------------------
-
-    star_words = [
+    star_terms = [
         "situation",
         "task",
         "action",
-        "result"
+        "result",
     ]
 
-    star_count = sum(
-        1 for word in star_words
-        if word in text
+    star_matches = sum(
+        1 for term in star_terms
+        if term in lower_answer
     )
 
-    if star_count >= 3:
-
+    if star_matches >= 2:
         score += 1
-
         strengths.append(
-            "Your answer shows elements of the STAR method."
+            "Your answer shows signs of a structured STAR-style response."
         )
 
     else:
-
         improvements.append(
-            "For experience questions, consider using the STAR method."
+            "For experience-based questions, structure your answer "
+            "using Situation, Task, Action, and Result."
         )
 
+    # Keep score between 1 and 5.
+    score = max(1, min(score, 5))
 
-    # -----------------------------------------------------
-    # FINAL SCORE
-    # -----------------------------------------------------
+    # --------------------------------------------------------
+    # SCORE-BASED FEEDBACK
+    # --------------------------------------------------------
 
-    score = min(
-        5,
-        round(score * 2) / 2
-    )
-
-
-    # -----------------------------------------------------
-    # GENERAL FEEDBACK
-    # -----------------------------------------------------
-
-    if score >= 4:
-
-        feedback = (
-            "Excellent answer! You demonstrated several "
-            "qualities that are important for cabin crew."
+    if score == 5:
+        overall = (
+            "Excellent answer. It is detailed, relevant, and shows "
+            "strong interview awareness."
         )
 
-    elif score >= 3:
-
-        feedback = (
-            "Good answer! You have a solid foundation, "
-            "but you can make it stronger with a specific "
-            "example and clearer structure."
+    elif score == 4:
+        overall = (
+            "Very good answer. With a little more structure or detail, "
+            "it could become excellent."
         )
 
-    elif score >= 2:
+    elif score == 3:
+        overall = (
+            "Good starting point. Your answer has useful content, "
+            "but it needs stronger evidence or structure."
+        )
 
-        feedback = (
-            "Fair answer. You have some good points, "
-            "but the interviewer would benefit from more "
-            "detail and a stronger example."
+    elif score == 2:
+        overall = (
+            "Your answer needs more development. Try adding a specific "
+            "example and connecting it to cabin crew responsibilities."
         )
 
     else:
-
-        feedback = (
-            "Your answer needs improvement. Try to give "
-            "a clearer, more detailed response and connect "
-            "your answer to the cabin crew role."
+        overall = (
+            "Your answer needs significant improvement. Give a complete "
+            "professional response and support your points with examples."
         )
 
-
-    # -----------------------------------------------------
-    # DEFAULT IMPROVEMENTS
-    # -----------------------------------------------------
-
-    if not improvements:
-
-        improvements.append(
-            "Keep your answer natural and avoid sounding memorized."
-        )
-
-    improvements.append(
-        "Speak clearly, maintain good eye contact, and show confidence."
-    )
+    return {
+        "score": score,
+        "overall": overall,
+        "strengths": strengths,
+        "improvements": improvements,
+    }
 
 
-    return score, feedback, strengths, improvements
-
-
-# =========================================================
+# ============================================================
 # HERO SECTION
-# =========================================================
+# ============================================================
 
-st.markdown("""
-<div class="hero">
+st.markdown(
+    """
+    <div class="hero">
+        <div class="hero-badge">✈️ CABIN CREW INTERVIEW TRAINING</div>
+        <h1>Crew Prep AI</h1>
+        <p>
+            Practice realistic cabin crew interview questions,
+            improve your answers, and build confidence before your
+            airline interview.
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
-    <h1>✈️ Crew Prep AI Bot</h1>
 
-    <p>
-        Practice cabin crew interviews, improve your answers,
-        and build confidence before your big interview.
-    </p>
-
-</div>
-""", unsafe_allow_html=True)
-
-
-# =========================================================
+# ============================================================
 # SIDEBAR
-# =========================================================
+# ============================================================
 
 with st.sidebar:
 
-    st.header("🎯 Interview Practice")
+    st.markdown("## ✈️ Crew Prep")
 
-    category_options = [
-        "All Categories"
-    ] + sorted(
-        list(
-            set(
-                question["category"]
-                for question in questions
-            )
-        )
+    st.markdown(
+        "Prepare for your next cabin crew interview."
     )
+
+    st.divider()
+
+    st.markdown("### Practice Settings")
+
+    categories = get_categories()
 
     selected_category = st.selectbox(
-        "Choose a category",
-        category_options
+        "Question category",
+        categories,
+        index=categories.index(
+            st.session_state.selected_category
+        ),
     )
 
+    # If category changes, immediately select a question
+    # from the new category.
+    if selected_category != st.session_state.selected_category:
+
+        st.session_state.selected_category = selected_category
+
+        available = get_available_questions(selected_category)
+
+        if available:
+            st.session_state.current_question = random.choice(
+                available
+            )
+
+        st.session_state.answered = False
+        st.session_state.last_score = None
+        st.session_state.last_feedback = None
+
+        st.rerun()
 
     st.divider()
 
+    st.markdown("### 📊 Your Progress")
 
-    st.subheader("📊 Your Progress")
+    questions_answered = st.session_state.questions_answered
 
-    st.metric(
-        "Questions Answered",
-        st.session_state.questions_answered
-    )
-
-    st.metric(
-        "Total Score",
-        f"{st.session_state.total_score:.1f}"
-    )
-
-
-    if st.session_state.questions_answered > 0:
-
-        average = (
+    if questions_answered > 0:
+        average_score = (
             st.session_state.total_score
-            / st.session_state.questions_answered
+            / questions_answered
         )
+    else:
+        average_score = 0
 
-        st.metric(
-            "Average Score",
-            f"{average:.1f}/5"
-        )
+    st.metric(
+        "Questions answered",
+        questions_answered,
+    )
 
+    st.metric(
+        "Average score",
+        f"{average_score:.1f} / 5",
+    )
 
     st.divider()
 
+    if st.button(
+        "🔄 Reset Progress",
+        use_container_width=True,
+    ):
+        st.session_state.questions_answered = 0
+        st.session_state.total_score = 0
+        st.session_state.last_score = None
+        st.session_state.last_feedback = None
+        st.session_state.answered = False
+        st.session_state.current_question = choose_question()
 
-    st.subheader("💡 Interview Tip")
+        st.rerun()
 
-    st.write(
-        "Don't memorize your answers word-for-word. "
-        "Understand your examples and speak naturally."
+    st.markdown(
+        """
+        <div style="margin-top:25px; font-size:13px; opacity:0.75;">
+            <b>Tip:</b><br>
+            Speak naturally. Don't memorize answers word-for-word.
+            Use real experiences whenever possible.
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
 
-# =========================================================
-# FILTER QUESTIONS
-# =========================================================
+# ============================================================
+# TOP STATISTICS
+# ============================================================
 
-if selected_category == "All Categories":
+col1, col2, col3 = st.columns(3)
 
-    available_questions = questions
+with col1:
+    st.metric(
+        "✈️ Interview Questions",
+        len(questions),
+    )
 
-else:
+with col2:
+    st.metric(
+        "📚 Categories",
+        len(get_categories()) - 1,
+    )
 
-    available_questions = [
-        question
-        for question in questions
-        if question["category"] == selected_category
-    ]
-
-
-# Make sure current question belongs to selected category
-
-if (
-    st.session_state.current_question
-    not in available_questions
-):
-
-    st.session_state.current_question = random.choice(
-        available_questions
+with col3:
+    st.metric(
+        "🎯 Your Average",
+        (
+            f"{st.session_state.total_score / st.session_state.questions_answered:.1f}/5"
+            if st.session_state.questions_answered > 0
+            else "—"
+        ),
     )
 
 
-# =========================================================
-# QUESTION SECTION
-# =========================================================
+# ============================================================
+# CURRENT QUESTION
+# ============================================================
 
 question = st.session_state.current_question
 
+available_questions = get_available_questions(
+    st.session_state.selected_category
+)
 
-st.subheader("🎤 Interview Question")
+try:
+    question_position = (
+        available_questions.index(question) + 1
+    )
+except ValueError:
+    question_position = 1
 
 
 st.markdown(
     f"""
     <div class="question-card">
 
-        <div class="category">
+        <div class="category-label">
             {question["category"]}
         </div>
 
-        <h2>
+        <div class="question-number">
+            Interview Question
+        </div>
+
+        <div class="question-text">
             {question["q"]}
-        </h2>
+        </div>
 
         <div class="tip-box">
-            <strong>💡 Interview Tip</strong><br><br>
+            <span class="tip-title">💡 Interview Tip</span><br>
             {question["tip"]}
         </div>
 
     </div>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 
-# =========================================================
+# ============================================================
 # ANSWER AREA
-# =========================================================
+# ============================================================
 
-st.subheader("✍️ Your Answer")
-
+st.markdown("### 📝 Your Answer")
 
 answer = st.text_area(
-    "Type your answer below:",
-    height=220,
+    "Type your interview answer below:",
+    height=210,
     placeholder=(
-        "Imagine you are sitting in front of the interviewer. "
-        "Write the answer you would actually give..."
+        "Imagine you are sitting in front of the recruiter. "
+        "Answer naturally and professionally..."
     ),
-    key="answer_box"
+    disabled=st.session_state.answered,
 )
 
 
-# =========================================================
-# BUTTONS
-# =========================================================
+# ============================================================
+# ACTION BUTTONS
+# ============================================================
 
-col1, col2, col3 = st.columns(3)
+button_col1, button_col2, button_col3 = st.columns(
+    [1.5, 1.2, 1.2]
+)
 
-
-with col1:
+with button_col1:
 
     submit = st.button(
-        "✅ Submit Answer",
-        use_container_width=True
+        "🎯 Submit Answer",
+        type="primary",
+        use_container_width=True,
+        disabled=st.session_state.answered,
     )
 
-
-with col2:
+with button_col2:
 
     next_question = st.button(
         "➡️ Next Question",
-        use_container_width=True
+        use_container_width=True,
     )
 
-
-with col3:
+with button_col3:
 
     random_question = st.button(
-        "🎲 Random Question",
-        use_container_width=True
+        "🎲 Random",
+        use_container_width=True,
     )
 
 
-# =========================================================
+# ============================================================
 # SUBMIT ANSWER
-# =========================================================
+# ============================================================
 
 if submit:
 
-    if len(answer.strip()) < 10:
+    if not answer.strip():
 
         st.warning(
-            "Your answer is too short. "
-            "Try giving the interviewer more detail."
+            "Please type an answer before submitting."
         )
 
     else:
 
-        (
-            score,
-            feedback,
-            strengths,
-            improvements
-        ) = evaluate_answer(answer)
+        feedback = evaluate_answer(
+            answer,
+            question,
+        )
 
+        st.session_state.last_score = feedback["score"]
+        st.session_state.last_feedback = feedback
+        st.session_state.answered = True
 
         st.session_state.questions_answered += 1
+        st.session_state.total_score += feedback["score"]
 
-        st.session_state.total_score += score
-
-        st.session_state.last_score = score
-
-        st.session_state.last_feedback = feedback
-
-        st.session_state.last_strengths = strengths
-
-        st.session_state.last_improvements = improvements
+        st.rerun()
 
 
-# =========================================================
-# FEEDBACK SECTION
-# =========================================================
-
-if st.session_state.last_score is not None:
-
-    st.divider()
-
-    st.subheader("📋 Interview Feedback")
-
-
-    score = st.session_state.last_score
-
-
-    if score >= 4:
-
-        st.success(
-            f"⭐ Score: {score}/5 — Excellent!"
-        )
-
-    elif score >= 3:
-
-        st.info(
-            f"⭐ Score: {score}/5 — Good answer!"
-        )
-
-    else:
-
-        st.warning(
-            f"⭐ Score: {score}/5 — Keep improving!"
-        )
-
-
-    st.write(
-        st.session_state.last_feedback
-    )
-
-
-    if st.session_state.last_strengths:
-
-        st.markdown("### 💪 What You Did Well")
-
-        for strength in st.session_state.last_strengths:
-
-            st.write(
-                f"✅ {strength}"
-            )
-
-
-    if st.session_state.last_improvements:
-
-        st.markdown("### 🔧 How You Can Improve")
-
-        for improvement in st.session_state.last_improvements:
-
-            st.write(
-                f"• {improvement}"
-            )
-
-
-# =========================================================
-# STAR METHOD
-# =========================================================
-
-st.divider()
-
-st.subheader("⭐ STAR Method")
-
-
-st.write(
-    "Use STAR when the interviewer asks you about "
-    "a previous experience or difficult situation."
-)
-
-
-star_col1, star_col2, star_col3, star_col4 = st.columns(4)
-
-
-with star_col1:
-
-    st.markdown("### S")
-
-    st.write("**Situation**")
-
-    st.caption(
-        "What was happening?"
-    )
-
-
-with star_col2:
-
-    st.markdown("### T")
-
-    st.write("**Task**")
-
-    st.caption(
-        "What were you responsible for?"
-    )
-
-
-with star_col3:
-
-    st.markdown("### A")
-
-    st.write("**Action**")
-
-    st.caption(
-        "What exactly did you do?"
-    )
-
-
-with star_col4:
-
-    st.markdown("### R")
-
-    st.write("**Result**")
-
-    st.caption(
-        "What happened because of your actions?"
-    )
-
-
-# =========================================================
-# NEXT QUESTION LOGIC
-# =========================================================
+# ============================================================
+# NEXT QUESTION
+# ============================================================
 
 if next_question:
 
-    get_new_question()
-
+    reset_question()
     st.rerun()
 
+
+# ============================================================
+# RANDOM QUESTION
+# ============================================================
 
 if random_question:
 
-    if selected_category == "All Categories":
-
-        st.session_state.current_question = random.choice(
-            questions
-        )
-
-    else:
-
-        st.session_state.current_question = random.choice(
-            available_questions
-        )
-
-    st.session_state.last_score = None
-    st.session_state.last_feedback = None
-    st.session_state.last_strengths = []
-    st.session_state.last_improvements = []
-
+    reset_question()
     st.rerun()
 
 
-# =========================================================
+# ============================================================
+# FEEDBACK
+# ============================================================
+
+if st.session_state.last_feedback:
+
+    feedback = st.session_state.last_feedback
+    score = feedback["score"]
+
+    st.divider()
+
+    st.markdown("## 🎯 Interview Feedback")
+
+    result_col1, result_col2 = st.columns(
+        [1, 2.5]
+    )
+
+    with result_col1:
+
+        st.markdown(
+            f"""
+            <div class="result-card">
+                <div class="score-number">
+                    {score}/5
+                </div>
+                <div class="score-label">
+                    Interview Score
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with result_col2:
+
+        st.markdown(
+            f"""
+            <div class="result-card">
+                <strong>Overall Feedback</strong>
+                <p style="color:#475569; line-height:1.6;">
+                    {feedback["overall"]}
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # --------------------------------------------------------
+    # STRENGTHS
+    # --------------------------------------------------------
+
+    st.markdown("### 💪 Strengths")
+
+    if feedback["strengths"]:
+
+        for strength in feedback["strengths"]:
+
+            st.markdown(
+                f"""
+                <div class="strength">
+                    ✓ {strength}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    else:
+
+        st.info(
+            "Keep practicing and look for ways to make your "
+            "answers more specific."
+        )
+
+    # --------------------------------------------------------
+    # IMPROVEMENTS
+    # --------------------------------------------------------
+
+    st.markdown("### 🔧 Areas to Improve")
+
+    if feedback["improvements"]:
+
+        for improvement in feedback["improvements"]:
+
+            st.markdown(
+                f"""
+                <div class="weakness">
+                    → {improvement}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    else:
+
+        st.success(
+            "No major improvement areas were detected."
+        )
+
+    # --------------------------------------------------------
+    # STAR METHOD
+    # --------------------------------------------------------
+
+    st.markdown(
+        """
+        <div class="star-box">
+
+            <div class="star-title">
+                ⭐ Use the STAR Method
+            </div>
+
+            <div class="star-item">
+                <b>S — Situation:</b>
+                Briefly explain what was happening.
+            </div>
+
+            <div class="star-item">
+                <b>T — Task:</b>
+                Explain what you were responsible for.
+            </div>
+
+            <div class="star-item">
+                <b>A — Action:</b>
+                Explain exactly what you did.
+            </div>
+
+            <div class="star-item">
+                <b>R — Result:</b>
+                Explain the positive outcome or what you learned.
+            </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("")
+
+    if st.button(
+        "🚀 Practice Another Question",
+        type="primary",
+        use_container_width=True,
+    ):
+
+        reset_question()
+        st.rerun()
+
+
+# ============================================================
 # FOOTER
-# =========================================================
+# ============================================================
 
 st.markdown(
     """
     <div class="footer">
-
-        ✈️ Crew Prep AI Bot<br>
-
-        Built to help aspiring cabin crew candidates
-        practice with confidence.
-
+        ✈️ Crew Prep AI · Cabin Crew Interview Practice
+        <br>
+        Practice • Improve • Prepare • Fly
     </div>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
+```
