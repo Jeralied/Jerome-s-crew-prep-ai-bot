@@ -1,6 +1,9 @@
-```python
+import html
 import json
 import random
+import re
+from pathlib import Path
+
 import streamlit as st
 
 
@@ -23,9 +26,6 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-
-    /* ---------- GENERAL ---------- */
-
     .stApp {
         background: #f5f7fa;
     }
@@ -63,8 +63,8 @@ st.markdown(
 
     .hero-badge {
         display: inline-block;
-        background: rgba(255,255,255,0.15);
-        border: 1px solid rgba(255,255,255,0.25);
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.25);
         padding: 7px 13px;
         border-radius: 999px;
         font-size: 13px;
@@ -242,16 +242,15 @@ st.markdown(
             font-size: 15px;
         }
 
-        .question-card {
+        .question-card,
+        .result-card {
             padding: 22px;
         }
 
         .question-text {
             font-size: 22px;
         }
-
     }
-
     </style>
     """,
     unsafe_allow_html=True,
@@ -259,35 +258,73 @@ st.markdown(
 
 
 # ============================================================
-# LOAD QUESTIONS
+# LOAD AND VALIDATE QUESTIONS
 # ============================================================
 
-@st.cache_data
+QUESTIONS_FILE = Path(__file__).resolve().parent / "questions.json"
+
+
+@st.cache_data(show_spinner=False)
 def load_questions():
     try:
-        with open("questions.json", "r", encoding="utf-8") as file:
-            return json.load(file)
+        with QUESTIONS_FILE.open("r", encoding="utf-8") as file:
+            data = json.load(file)
 
     except FileNotFoundError:
-        st.error(
-            "❌ questions.json was not found. "
-            "Make sure questions.json is in the same folder as app.py."
+        return [], (
+            "questions.json was not found. "
+            "Make sure it is in the same folder as app.py."
         )
-        return []
 
-    except json.JSONDecodeError:
-        st.error(
-            "❌ questions.json contains invalid JSON. "
-            "Please check the file formatting."
+    except json.JSONDecodeError as error:
+        return [], (
+            "questions.json contains invalid JSON. "
+            f"Check the formatting. Details: {error}"
         )
-        return []
+
+    if not isinstance(data, list):
+        return [], (
+            "questions.json must contain a list of question objects."
+        )
+
+    cleaned_questions = []
+
+    for number, item in enumerate(data, start=1):
+
+        if not isinstance(item, dict):
+            continue
+
+        category = str(item.get("category", "")).strip()
+        question = str(item.get("q", "")).strip()
+        tip = str(item.get("tip", "")).strip()
+
+        if not category or not question:
+            continue
+
+        cleaned_questions.append(
+            {
+                "id": f"question-{number}",
+                "category": category,
+                "q": question,
+                "tip": (
+                    tip
+                    or
+                    "Answer naturally and support your response "
+                    "with a relevant example when appropriate."
+                ),
+            }
+        )
+
+    if not cleaned_questions:
+        return [], "No valid questions were found in questions.json."
+
+    return cleaned_questions, None
 
 
-questions = load_questions()
+questions, load_error = load_questions()
 
-
-# Stop the app if questions cannot be loaded.
-if not questions:
+if load_error:
+    st.error(f"❌ {load_error}")
     st.stop()
 
 
@@ -316,19 +353,28 @@ if "total_score" not in st.session_state:
 if "selected_category" not in st.session_state:
     st.session_state.selected_category = "All Categories"
 
+if "asked_ids" not in st.session_state:
+    st.session_state.asked_ids = []
+
+if "session_history" not in st.session_state:
+    st.session_state.session_history = []
+
 
 # ============================================================
 # HELPER FUNCTIONS
 # ============================================================
 
 def get_categories():
+    """Return all available question categories."""
     categories = sorted(
-        list(set(question["category"] for question in questions))
+        {question["category"] for question in questions}
     )
+
     return ["All Categories"] + categories
 
 
 def get_available_questions(category):
+    """Return questions belonging to a selected category."""
     if category == "All Categories":
         return questions
 
@@ -341,7 +387,8 @@ def get_available_questions(category):
 
 def choose_question(category=None):
     """
-    Choose a random question while respecting the selected category.
+    Choose a question while respecting the selected category
+    and avoiding previously asked questions when possible.
     """
 
     if category is None:
@@ -352,33 +399,119 @@ def choose_question(category=None):
     if not available:
         available = questions
 
-    # Try not to show exactly the same question twice in a row.
-    if len(available) > 1:
-        possible_questions = [
-            q
-            for q in available
-            if q != st.session_state.current_question
-        ]
+    current_id = st.session_state.current_question.get("id")
 
-        if possible_questions:
-            return random.choice(possible_questions)
+    # Prefer questions that have not appeared in this session.
+    unseen_questions = [
+        question
+        for question in available
+        if question["id"] not in st.session_state.asked_ids
+        and question["id"] != current_id
+    ]
+
+    if unseen_questions:
+        return random.choice(unseen_questions)
+
+    # If all questions have been used, start another cycle.
+    different_questions = [
+        question
+        for question in available
+        if question["id"] != current_id
+    ]
+
+    if different_questions:
+        return random.choice(different_questions)
 
     return random.choice(available)
 
 
-def reset_question():
+def start_new_question():
+    """Move to a new question and clear the previous feedback."""
+
+    current_id = st.session_state.current_question.get("id")
+
+    if current_id and current_id not in st.session_state.asked_ids:
+        st.session_state.asked_ids.append(current_id)
+
     st.session_state.current_question = choose_question()
+
     st.session_state.answered = False
     st.session_state.last_score = None
     st.session_state.last_feedback = None
 
 
+def reset_progress():
+    """Reset the current practice session."""
+
+    st.session_state.questions_answered = 0
+    st.session_state.total_score = 0
+    st.session_state.asked_ids = []
+    st.session_state.session_history = []
+
+    st.session_state.answered = False
+    st.session_state.last_score = None
+    st.session_state.last_feedback = None
+
+    available = get_available_questions(
+        st.session_state.selected_category
+    )
+
+    st.session_state.current_question = random.choice(
+        available or questions
+    )
+
+
+def count_words(text):
+    """Count words consistently throughout the application."""
+
+    return len(
+        re.findall(
+            r"\b[\w'-]+\b",
+            text,
+        )
+    )
+
+
+def tokenize(text):
+    """Return lowercase word tokens."""
+
+    return set(
+        re.findall(
+            r"\b[a-zA-Z][a-zA-Z'-]*\b",
+            text.lower(),
+        )
+    )
+
+
+def contains_any(text, terms):
+    """Check whether a complete word/phrase appears in text."""
+
+    lower_text = text.lower()
+
+    return any(
+        re.search(
+            rf"\b{re.escape(term)}\b",
+            lower_text,
+        )
+        for term in terms
+    )
+
+
+# ============================================================
+# ANSWER EVALUATION
+# ============================================================
+
 def evaluate_answer(answer, question):
     """
-    Simple interview-answer evaluation.
+    Free, transparent, rule-based interview coaching.
 
-    This version does not require an external AI API.
-    It evaluates the answer using useful interview indicators.
+    This is NOT an external AI model.
+    It evaluates answer quality using:
+    - detail
+    - cabin-crew relevance
+    - evidence/examples
+    - structure
+    - question category
     """
 
     answer = answer.strip()
@@ -386,194 +519,568 @@ def evaluate_answer(answer, question):
     if not answer:
         return {
             "score": 0,
-            "strengths": ["You did not provide an answer yet."],
+            "overall": "No answer was submitted.",
+            "strengths": [],
             "improvements": [
                 "Write a complete answer before submitting."
             ],
+            "checks": [],
         }
 
-    words = answer.split()
-    word_count = len(words)
+    word_count = count_words(answer)
+    lower_answer = answer.lower()
+    tokens = tokenize(answer)
 
-    score = 1
-    strengths = []
-    improvements = []
+    category = question["category"].lower()
 
-    # --------------------------------------------------------
-    # LENGTH
-    # --------------------------------------------------------
+    # Categories where a real example/story is especially useful.
+    behavioral_categories = {
+        "teamwork",
+        "situational",
+        "experience",
+        "customer service",
+        "safety",
+    }
 
-    if word_count >= 80:
-        score += 1
-        strengths.append(
-            "Your answer has enough detail to develop your point."
-        )
-
-    elif word_count >= 45:
-        score += 1
-        strengths.append(
-            "Your answer provides a reasonable amount of detail."
-        )
-
-    else:
-        improvements.append(
-            "Try to give more detail. Aim for roughly 60–120 words "
-            "for most interview answers."
-        )
+    behavioral = category in behavioral_categories
 
     # --------------------------------------------------------
-    # CUSTOMER SERVICE / PROFESSIONAL LANGUAGE
+    # CATEGORY-SPECIFIC RELEVANCE
     # --------------------------------------------------------
 
-    positive_terms = [
+    category_terms = {
+
+        "general": {
+            "professionalism",
+            "communication",
+            "passenger",
+            "customer",
+            "service",
+            "safety",
+            "teamwork",
+            "career",
+            "learn",
+        },
+
+        "customer service": {
+            "customer",
+            "passenger",
+            "service",
+            "listen",
+            "empathy",
+            "respect",
+            "complaint",
+            "solution",
+            "assist",
+            "calm",
+        },
+
+        "safety": {
+            "safety",
+            "procedure",
+            "policy",
+            "protocol",
+            "crew",
+            "passenger",
+            "report",
+            "emergency",
+            "calm",
+            "instruction",
+        },
+
+        "teamwork": {
+            "team",
+            "communication",
+            "support",
+            "collaborate",
+            "respect",
+            "listen",
+            "help",
+            "together",
+            "colleague",
+            "crew",
+        },
+
+        "situational": {
+            "calm",
+            "listen",
+            "communicate",
+            "professional",
+            "safety",
+            "assist",
+            "inform",
+            "supervisor",
+            "solution",
+            "respect",
+        },
+
+        "airline": {
+            "airline",
+            "passenger",
+            "customer",
+            "service",
+            "safety",
+            "brand",
+            "culture",
+            "crew",
+            "learn",
+            "professional",
+        },
+
+        "personal": {
+            "strength",
+            "improve",
+            "learn",
+            "experience",
+            "goal",
+            "professional",
+            "communication",
+            "teamwork",
+            "service",
+        },
+
+        "experience": {
+            "customer",
+            "passenger",
+            "team",
+            "service",
+            "handled",
+            "solved",
+            "learned",
+            "result",
+            "communication",
+            "responsibility",
+        },
+    }
+
+    default_terms = {
         "customer",
         "passenger",
         "service",
         "safety",
         "team",
-        "teamwork",
         "communication",
         "professional",
-        "calm",
-        "respect",
-        "help",
-        "assist",
-        "experience",
-        "solution",
-        "listen",
-        "empathy",
-        "responsibility",
-        "adapt",
-        "learn",
-    ]
+    }
 
-    lower_answer = answer.lower()
+    relevance_terms = category_terms.get(
+        category,
+        default_terms,
+    )
 
     matched_terms = [
-        term for term in positive_terms
-        if term in lower_answer
+        term
+        for term in relevance_terms
+        if term in tokens
     ]
 
-    if len(matched_terms) >= 4:
+    # --------------------------------------------------------
+    # DETAIL
+    # --------------------------------------------------------
+
+    detail_ok = word_count >= 45
+    detail_strong = word_count >= 80
+
+    # --------------------------------------------------------
+    # REAL EXAMPLE / EVIDENCE
+    # --------------------------------------------------------
+
+    evidence_patterns = [
+        r"\bfor example\b",
+        r"\bin my experience\b",
+        r"\bwhen i\b",
+        r"\bwhile i\b",
+        r"\bduring\b",
+        r"\bat work\b",
+        r"\bin my role\b",
+        r"\bi handled\b",
+        r"\bi helped\b",
+        r"\bi learned\b",
+        r"\bi resolved\b",
+        r"\bi worked\b",
+        r"\bi dealt with\b",
+        r"\bi assisted\b",
+    ]
+
+    evidence_ok = any(
+        re.search(pattern, lower_answer)
+        for pattern in evidence_patterns
+    )
+
+    # --------------------------------------------------------
+    # STRUCTURE
+    # --------------------------------------------------------
+
+    structure_patterns = [
+        r"\bfirst\b",
+        r"\bthen\b",
+        r"\bafter that\b",
+        r"\bfinally\b",
+        r"\bbecause\b",
+        r"\bso that\b",
+        r"\bas a result\b",
+        r"\btherefore\b",
+    ]
+
+    structure_hits = sum(
+        bool(re.search(pattern, lower_answer))
+        for pattern in structure_patterns
+    )
+
+    structure_ok = structure_hits >= 1
+
+    # --------------------------------------------------------
+    # STAR SIGNALS
+    # --------------------------------------------------------
+
+    star_components = {
+        "situation": bool(
+            re.search(
+                r"\b(when|during|while|situation)\b",
+                lower_answer,
+            )
+        ),
+
+        "task": bool(
+            re.search(
+                r"\b(task|responsible|responsibility|needed to)\b",
+                lower_answer,
+            )
+        ),
+
+        "action": bool(
+            re.search(
+                r"\b(i decided|i handled|i spoke|i helped|"
+                r"i asked|i contacted|i explained|i assisted|"
+                r"i resolved|i took)\b",
+                lower_answer,
+            )
+        ),
+
+        "result": bool(
+            re.search(
+                r"\b(result|outcome|resolved|improved|"
+                r"learned|success|successfully)\b",
+                lower_answer,
+            )
+        ),
+    }
+
+    star_hits = sum(star_components.values())
+
+    # --------------------------------------------------------
+    # SCORING
+    # --------------------------------------------------------
+
+    # Start at 1 and earn up to four additional points.
+    score = 1
+
+    strengths = []
+    improvements = []
+
+    # 1. Detail
+    if detail_ok:
+
         score += 1
-        strengths.append(
-            "You used language that is relevant to cabin crew and "
-            "customer-facing work."
-        )
+
+        if detail_strong:
+            strengths.append(
+                "You gave enough detail to develop your answer."
+            )
+        else:
+            strengths.append(
+                "Your answer has a reasonable amount of detail."
+            )
 
     else:
+
         improvements.append(
-            "Connect your answer more clearly to cabin crew qualities "
-            "such as safety, service, teamwork, communication, empathy, "
+            "Add more detail. For most questions, aim for roughly "
+            "60–120 words."
+        )
+
+    # 2. Relevance
+    if len(matched_terms) >= 2:
+
+        score += 1
+
+        if len(matched_terms) >= 4:
+            strengths.append(
+                "You connected your answer to several qualities "
+                "relevant to cabin crew work."
+            )
+        else:
+            strengths.append(
+                "Your answer includes some relevant cabin-crew qualities."
+            )
+
+    else:
+
+        improvements.append(
+            "Connect your answer more clearly to qualities such as "
+            "safety, service, communication, teamwork, empathy, "
             "and professionalism."
         )
 
-    # --------------------------------------------------------
-    # EXAMPLE / EVIDENCE
-    # --------------------------------------------------------
+    # 3. Evidence
+    if evidence_ok:
 
-    evidence_terms = [
-        "when",
-        "while",
-        "because",
-        "for example",
-        "experience",
-        "worked",
-        "handled",
-        "helped",
-        "during",
-        "situation",
-    ]
-
-    evidence_count = sum(
-        1 for term in evidence_terms
-        if term in lower_answer
-    )
-
-    if evidence_count >= 2:
         score += 1
+
         strengths.append(
-            "You included evidence or an example rather than relying "
-            "only on general statements."
+            "You included language suggesting a real example or experience."
         )
 
     else:
+
         improvements.append(
-            "Where possible, include a real example from your work, "
-            "school, volunteering, or other experience."
+            "Add a specific example from work, school, volunteering, "
+            "or another real experience."
         )
 
-    # --------------------------------------------------------
-    # STAR / STRUCTURE
-    # --------------------------------------------------------
+    # 4. Structure
+    if behavioral:
 
-    star_terms = [
-        "situation",
-        "task",
-        "action",
-        "result",
-    ]
+        if star_hits >= 2 or structure_ok:
 
-    star_matches = sum(
-        1 for term in star_terms
-        if term in lower_answer
-    )
+            score += 1
 
-    if star_matches >= 2:
-        score += 1
-        strengths.append(
-            "Your answer shows signs of a structured STAR-style response."
-        )
+            strengths.append(
+                "Your answer has some structure, which helps an "
+                "interviewer follow your story."
+            )
+
+        else:
+
+            improvements.append(
+                "For experience or situation questions, make the story "
+                "clearer: Situation → Task → Action → Result."
+            )
 
     else:
-        improvements.append(
-            "For experience-based questions, structure your answer "
-            "using Situation, Task, Action, and Result."
-        )
 
-    # Keep score between 1 and 5.
-    score = max(1, min(score, 5))
+        if structure_ok:
+
+            score += 1
+
+            strengths.append(
+                "Your answer has a clear logical flow."
+            )
+
+        else:
+
+            improvements.append(
+                "Use a simple structure: direct answer → "
+                "reason/example → strong closing point."
+            )
+
+    score = min(5, max(1, score))
 
     # --------------------------------------------------------
-    # SCORE-BASED FEEDBACK
+    # OVERALL FEEDBACK
     # --------------------------------------------------------
 
     if score == 5:
+
         overall = (
-            "Excellent answer. It is detailed, relevant, and shows "
-            "strong interview awareness."
+            "Strong answer. It is detailed, relevant, and structured. "
+            "Keep it natural rather than memorizing it word-for-word."
         )
 
     elif score == 4:
+
         overall = (
-            "Very good answer. With a little more structure or detail, "
-            "it could become excellent."
+            "Very good answer. You have a solid foundation; "
+            "strengthen the one or two areas shown below."
         )
 
     elif score == 3:
+
         overall = (
-            "Good starting point. Your answer has useful content, "
-            "but it needs stronger evidence or structure."
+            "Good starting point. Add stronger evidence, relevance, "
+            "or structure to make the answer more convincing."
         )
 
     elif score == 2:
+
         overall = (
-            "Your answer needs more development. Try adding a specific "
-            "example and connecting it to cabin crew responsibilities."
+            "Your answer needs more development. Add a specific "
+            "example and show how your actions helped the customer, "
+            "team, or situation."
         )
 
     else:
+
         overall = (
-            "Your answer needs significant improvement. Give a complete "
-            "professional response and support your points with examples."
+            "Your answer needs significant development. "
+            "Give a complete response and connect it directly "
+            "to the question."
         )
+
+    checks = [
+        f"Length: {word_count} words",
+        f"Relevant terms detected: {len(matched_terms)}",
+        (
+            "Real-example signal: Yes"
+            if evidence_ok
+            else "Real-example signal: Not detected"
+        ),
+        (
+            "Structure signal: Yes"
+            if structure_ok
+            else "Structure signal: Not detected"
+        ),
+    ]
 
     return {
         "score": score,
         "overall": overall,
         "strengths": strengths,
         "improvements": improvements,
+        "checks": checks,
     }
+
+
+# ============================================================
+# DISPLAY FEEDBACK
+# ============================================================
+
+def display_feedback(feedback):
+
+    score = feedback["score"]
+
+    st.divider()
+
+    st.markdown("## 🎯 Interview Feedback")
+
+    result_col1, result_col2 = st.columns(
+        [1, 2.5]
+    )
+
+    with result_col1:
+
+        st.markdown(
+            f"""
+            <div class="result-card">
+                <div class="score-number">
+                    {score}/5
+                </div>
+
+                <div class="score-label">
+                    Interview Score
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with result_col2:
+
+        st.markdown(
+            f"""
+            <div class="result-card">
+                <strong>Overall Feedback</strong>
+
+                <p style="color:#475569; line-height:1.6;">
+                    {html.escape(feedback["overall"])}
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # --------------------------------------------------------
+    # STRENGTHS
+    # --------------------------------------------------------
+
+    st.markdown("### 💪 Strengths")
+
+    if feedback["strengths"]:
+
+        for strength in feedback["strengths"]:
+
+            st.markdown(
+                f"""
+                <div class="strength">
+                    ✓ {html.escape(strength)}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    else:
+
+        st.info(
+            "Keep practicing and look for ways to make your "
+            "answers more specific."
+        )
+
+    # --------------------------------------------------------
+    # IMPROVEMENTS
+    # --------------------------------------------------------
+
+    st.markdown("### 🔧 Areas to Improve")
+
+    if feedback["improvements"]:
+
+        for improvement in feedback["improvements"]:
+
+            st.markdown(
+                f"""
+                <div class="weakness">
+                    → {html.escape(improvement)}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    # --------------------------------------------------------
+    # TECHNICAL EVALUATION DETAILS
+    # --------------------------------------------------------
+
+    if feedback.get("checks"):
+
+        with st.expander("🔍 Evaluation details"):
+
+            for check in feedback["checks"]:
+                st.write(f"• {check}")
+
+    # --------------------------------------------------------
+    # STAR METHOD
+    # --------------------------------------------------------
+
+    st.markdown(
+        """
+        <div class="star-box">
+
+            <div class="star-title">
+                ⭐ STAR Method
+            </div>
+
+            <div class="star-item">
+                <b>S — Situation:</b>
+                Briefly explain what was happening.
+            </div>
+
+            <div class="star-item">
+                <b>T — Task:</b>
+                Explain what you were responsible for.
+            </div>
+
+            <div class="star-item">
+                <b>A — Action:</b>
+                Explain exactly what you did.
+            </div>
+
+            <div class="star-item">
+                <b>R — Result:</b>
+                Explain the outcome or what you learned.
+            </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # ============================================================
@@ -583,13 +1090,21 @@ def evaluate_answer(answer, question):
 st.markdown(
     """
     <div class="hero">
-        <div class="hero-badge">✈️ CABIN CREW INTERVIEW TRAINING</div>
-        <h1>Crew Prep AI</h1>
+
+        <div class="hero-badge">
+            ✈️ CABIN CREW INTERVIEW TRAINING
+        </div>
+
+        <h1>
+            Crew Prep AI
+        </h1>
+
         <p>
             Practice realistic cabin crew interview questions,
-            improve your answers, and build confidence before your
-            airline interview.
+            improve your answers, and build confidence before
+            your airline interview.
         </p>
+
     </div>
     """,
     unsafe_allow_html=True,
@@ -604,7 +1119,7 @@ with st.sidebar:
 
     st.markdown("## ✈️ Crew Prep")
 
-    st.markdown(
+    st.caption(
         "Prepare for your next cabin crew interview."
     )
 
@@ -622,13 +1137,14 @@ with st.sidebar:
         ),
     )
 
-    # If category changes, immediately select a question
-    # from the new category.
+    # Change category
     if selected_category != st.session_state.selected_category:
 
         st.session_state.selected_category = selected_category
 
-        available = get_available_questions(selected_category)
+        available = get_available_questions(
+            selected_category
+        )
 
         if available:
             st.session_state.current_question = random.choice(
@@ -643,17 +1159,22 @@ with st.sidebar:
 
     st.divider()
 
+    # --------------------------------------------------------
+    # PROGRESS
+    # --------------------------------------------------------
+
     st.markdown("### 📊 Your Progress")
 
-    questions_answered = st.session_state.questions_answered
+    questions_answered = (
+        st.session_state.questions_answered
+    )
 
-    if questions_answered > 0:
-        average_score = (
-            st.session_state.total_score
-            / questions_answered
-        )
-    else:
-        average_score = 0
+    average_score = (
+        st.session_state.total_score
+        / questions_answered
+        if questions_answered
+        else 0
+    )
 
     st.metric(
         "Questions answered",
@@ -667,25 +1188,33 @@ with st.sidebar:
 
     st.divider()
 
+    # --------------------------------------------------------
+    # RESET
+    # --------------------------------------------------------
+
     if st.button(
         "🔄 Reset Progress",
         use_container_width=True,
     ):
-        st.session_state.questions_answered = 0
-        st.session_state.total_score = 0
-        st.session_state.last_score = None
-        st.session_state.last_feedback = None
-        st.session_state.answered = False
-        st.session_state.current_question = choose_question()
 
+        reset_progress()
         st.rerun()
+
+    st.divider()
 
     st.markdown(
         """
-        <div style="margin-top:25px; font-size:13px; opacity:0.75;">
-            <b>Tip:</b><br>
-            Speak naturally. Don't memorize answers word-for-word.
+        <div style="font-size:13px; opacity:0.75;">
+
+            <b>Interview Tip:</b><br>
+
+            Speak naturally. Don't memorize answers
+            word-for-word.
+
+            <br><br>
+
             Use real experiences whenever possible.
+
         </div>
         """,
         unsafe_allow_html=True,
@@ -699,23 +1228,33 @@ with st.sidebar:
 col1, col2, col3 = st.columns(3)
 
 with col1:
+
     st.metric(
         "✈️ Interview Questions",
         len(questions),
     )
 
 with col2:
+
     st.metric(
         "📚 Categories",
         len(get_categories()) - 1,
     )
 
 with col3:
+
+    average_score = (
+        st.session_state.total_score
+        / st.session_state.questions_answered
+        if st.session_state.questions_answered
+        else 0
+    )
+
     st.metric(
         "🎯 Your Average",
         (
-            f"{st.session_state.total_score / st.session_state.questions_answered:.1f}/5"
-            if st.session_state.questions_answered > 0
+            f"{average_score:.1f}/5"
+            if st.session_state.questions_answered
             else "—"
         ),
     )
@@ -732,10 +1271,17 @@ available_questions = get_available_questions(
 )
 
 try:
-    question_position = (
-        available_questions.index(question) + 1
+
+    question_position = next(
+        index + 1
+        for index, item in enumerate(
+            available_questions
+        )
+        if item["id"] == question["id"]
     )
-except ValueError:
+
+except StopIteration:
+
     question_position = 1
 
 
@@ -744,20 +1290,28 @@ st.markdown(
     <div class="question-card">
 
         <div class="category-label">
-            {question["category"]}
+            {html.escape(question["category"])}
         </div>
 
         <div class="question-number">
-            Interview Question
+            Question {question_position}
+            of {len(available_questions)}
         </div>
 
         <div class="question-text">
-            {question["q"]}
+            {html.escape(question["q"])}
         </div>
 
         <div class="tip-box">
-            <span class="tip-title">💡 Interview Tip</span><br>
-            {question["tip"]}
+
+            <span class="tip-title">
+                💡 Interview Tip
+            </span>
+
+            <br>
+
+            {html.escape(question["tip"])}
+
         </div>
 
     </div>
@@ -772,14 +1326,31 @@ st.markdown(
 
 st.markdown("### 📝 Your Answer")
 
+# IMPORTANT:
+# Each question gets its own widget key.
+# This prevents an old answer from appearing
+# when the user moves to a new question.
+
+answer_key = (
+    f"answer_{question['id']}"
+)
+
 answer = st.text_area(
     "Type your interview answer below:",
     height=210,
+    key=answer_key,
     placeholder=(
-        "Imagine you are sitting in front of the recruiter. "
-        "Answer naturally and professionally..."
+        "Imagine you are sitting in front of "
+        "the recruiter. Answer naturally and "
+        "professionally..."
     ),
     disabled=st.session_state.answered,
+)
+
+word_count = count_words(answer)
+
+st.caption(
+    f"{word_count} words"
 )
 
 
@@ -800,12 +1371,14 @@ with button_col1:
         disabled=st.session_state.answered,
     )
 
+
 with button_col2:
 
     next_question = st.button(
         "➡️ Next Question",
         use_container_width=True,
     )
+
 
 with button_col3:
 
@@ -834,33 +1407,41 @@ if submit:
             question,
         )
 
-        st.session_state.last_score = feedback["score"]
+        st.session_state.last_score = (
+            feedback["score"]
+        )
+
         st.session_state.last_feedback = feedback
+
         st.session_state.answered = True
 
         st.session_state.questions_answered += 1
-        st.session_state.total_score += feedback["score"]
+
+        st.session_state.total_score += (
+            feedback["score"]
+        )
+
+        # Save session history.
+        st.session_state.session_history.append(
+            {
+                "question_id": question["id"],
+                "question": question["q"],
+                "category": question["category"],
+                "score": feedback["score"],
+            }
+        )
 
         st.rerun()
 
 
 # ============================================================
-# NEXT QUESTION
+# NEXT QUESTION / RANDOM QUESTION
 # ============================================================
 
-if next_question:
+if next_question or random_question:
 
-    reset_question()
-    st.rerun()
+    start_new_question()
 
-
-# ============================================================
-# RANDOM QUESTION
-# ============================================================
-
-if random_question:
-
-    reset_question()
     st.rerun()
 
 
@@ -870,136 +1451,9 @@ if random_question:
 
 if st.session_state.last_feedback:
 
-    feedback = st.session_state.last_feedback
-    score = feedback["score"]
-
-    st.divider()
-
-    st.markdown("## 🎯 Interview Feedback")
-
-    result_col1, result_col2 = st.columns(
-        [1, 2.5]
+    display_feedback(
+        st.session_state.last_feedback
     )
-
-    with result_col1:
-
-        st.markdown(
-            f"""
-            <div class="result-card">
-                <div class="score-number">
-                    {score}/5
-                </div>
-                <div class="score-label">
-                    Interview Score
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with result_col2:
-
-        st.markdown(
-            f"""
-            <div class="result-card">
-                <strong>Overall Feedback</strong>
-                <p style="color:#475569; line-height:1.6;">
-                    {feedback["overall"]}
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    # --------------------------------------------------------
-    # STRENGTHS
-    # --------------------------------------------------------
-
-    st.markdown("### 💪 Strengths")
-
-    if feedback["strengths"]:
-
-        for strength in feedback["strengths"]:
-
-            st.markdown(
-                f"""
-                <div class="strength">
-                    ✓ {strength}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-    else:
-
-        st.info(
-            "Keep practicing and look for ways to make your "
-            "answers more specific."
-        )
-
-    # --------------------------------------------------------
-    # IMPROVEMENTS
-    # --------------------------------------------------------
-
-    st.markdown("### 🔧 Areas to Improve")
-
-    if feedback["improvements"]:
-
-        for improvement in feedback["improvements"]:
-
-            st.markdown(
-                f"""
-                <div class="weakness">
-                    → {improvement}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-    else:
-
-        st.success(
-            "No major improvement areas were detected."
-        )
-
-    # --------------------------------------------------------
-    # STAR METHOD
-    # --------------------------------------------------------
-
-    st.markdown(
-        """
-        <div class="star-box">
-
-            <div class="star-title">
-                ⭐ Use the STAR Method
-            </div>
-
-            <div class="star-item">
-                <b>S — Situation:</b>
-                Briefly explain what was happening.
-            </div>
-
-            <div class="star-item">
-                <b>T — Task:</b>
-                Explain what you were responsible for.
-            </div>
-
-            <div class="star-item">
-                <b>A — Action:</b>
-                Explain exactly what you did.
-            </div>
-
-            <div class="star-item">
-                <b>R — Result:</b>
-                Explain the positive outcome or what you learned.
-            </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("")
 
     if st.button(
         "🚀 Practice Another Question",
@@ -1007,7 +1461,8 @@ if st.session_state.last_feedback:
         use_container_width=True,
     ):
 
-        reset_question()
+        start_new_question()
+
         st.rerun()
 
 
@@ -1018,11 +1473,14 @@ if st.session_state.last_feedback:
 st.markdown(
     """
     <div class="footer">
+
         ✈️ Crew Prep AI · Cabin Crew Interview Practice
+
         <br>
+
         Practice • Improve • Prepare • Fly
+
     </div>
     """,
     unsafe_allow_html=True,
 )
-```
